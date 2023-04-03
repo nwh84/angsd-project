@@ -5,6 +5,9 @@ date: "2023-03-22"
 output: html_document
 ---
 
+Github url: https://github.com/nwh84/angsd-project
+All bash scripts are in github repo
+
 ### Align samples
 ```{}
 $ sbatch align_all.sh
