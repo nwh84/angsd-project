@@ -1,0 +1,174 @@
+---
+title: "Finish Aligning and Generate Read Counts"
+author: "Noelle Wheeler"
+date: "2023-03-22"
+output: html_document
+---
+
+### Align samples
+```{}
+$ sbatch align_all.sh
+```
+
+### Run multiQC on flagstat and fastqc
+```{}
+sbatch run_fastQC.sh $SCRATCH_DIR/fastqc_out
+```
+[multiQC](https://htmlpreview.github.io/?https://github.com/nwh84/angsd-project/blob/main/multiqc.ouput.html)
+
+Output .html file in github
+This shows the summary of the samtools output and the multiqc output. We can see that SRR8368044_BP1 has far more reads mapped than the other samples. However, the total sequences count for the paired end reads looks similar to the other sequences. The high number of mapped reads may be due to a high level of PCR duplication or because the sample has many repetitive regions. When we look at fastQC results, we don't see high levels of duplicate reads for this sample, so PCR duplication is probably not the culprit.
+We can see in the flagstat results that this sample has a large number of total reads, mapped reads and secondary alignment. Therefore, maybe the high number of mapped reads is due to repetitive regions that lead to multiple mapping and more unique reads/higher gene expression. We also see a spike in GC content for many on the experimental groups which might be due to contamination or a biological effect. 
+
+### Rename to know which samples are control and which are BP1
+```{}
+$ rename SRR8367773 SRR8367773_control SRR8367773*
+$ rename SRR8367783 SRR8367783_control SRR8367783*
+$ rename SRR8367785 SRR8367785_control SRR8367785*
+$ rename SRR8367786 SRR8367786_control SRR8367786*
+$ rename SRR8367787 SRR8367787_control SRR8367787*
+$ rename SRR8367789 SRR8367789_control SRR8367789*
+
+$ rename SRR8368044 SRR8368044_BP1 SRR8368044*
+$ rename SRR8368048 SRR8368048_BP1 SRR8368048*
+$ rename SRR8368055 SRR8368055_BP1 SRR8368055*
+$ rename SRR8368061 SRR8368061_BP1 SRR8368061*
+$ rename SRR8368072 SRR8368072_BP1 SRR8368072*
+$ rename SRR8368152 SRR8368152_BP1 SRR8368152*
+```
+
+### Generate a read count table
+```{}
+$ cd $SCRATCH_DIR
+$ featureCounts -a hg38.ensGene.gtf -o gene_counts/hg38_fc alignments/SRR8367773_control.Aligned.sortedByCoord.out.bam alignments/SRR8367783_control.Aligned.sortedByCoord.out.bam alignments/SRR8367785_control.Aligned.sortedByCoord.out.bam
+alignments/SRR8367786_control.Aligned.sortedByCoord.out.bam
+alignments/SRR8367787_control.Aligned.sortedByCoord.out.bam
+alignments/SRR8367789_control.Aligned.sortedByCoord.out.bam
+alignments/SRR8368044_BP1.Aligned.sortedByCoord.out.bam
+alignments/SRR8368048_BP1.Aligned.sortedByCoord.out.bam
+alignments/SRR8368055_BP1.Aligned.sortedByCoord.out.bam
+alignments/SRR8368061_BP1.Aligned.sortedByCoord.out.bam
+alignments/SRR8368072_BP1.Aligned.sortedByCoord.out.bam
+alignments/SRR8368152_BP1.Aligned.sortedByCoord.out.bam -s 1 -p --countReadPairs -C
+```
+
+parameters: 
+-s 1, perform stranded read counting
+-p, Specify that input data contain paired-end reads
+--countReadPairs, Count read pairs (fragments) instead of reads.
+-C, Do not count read pairs that have their two ends mapping to different chromosomes or mapping to same chromosome but on different strands.
+
+### Load read count table
+```{r}
+read_counts_summary <- read.table('/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project/hg38_fc.summary')
+read_counts <- read.table('/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project/hg38_fc', header = TRUE)
+```
+
+### Perform the quality control and processing steps
+run qorts for quality control
+```{}
+$ mamba activate qorts
+$ sbatch run_qorts.sh $SCRATCH_DIR/alignments
+```
+
+```{r}
+install.packages("http://hartleys.github.io/QoRTs/QoRTs_LATEST.tar.gz",
+repos = NULL,
+type="source")
+```
+```{r}
+library(QoRTs)
+# make decoder file
+incompleteDecoder <- data.frame(unique.ID = c("SRR8367773_control","SRR8367783_control","SRR8367785_control", "SRR8367786_control", "SRR8367787_control", "SRR8367789_control", "SRR8368044_BP1", "SRR8368048_BP1", "SRR8368055_BP1", "SRR8368061_BP1", "SRR8368072_BP1", "SRR8368152_BP1"),
+group.ID = c("CONTROL","CONTROL","CONTROL","CONTROL","CONTROL","CONTROL","CASE","CASE","CASE","CASE","CASE","CASE"),  qc.data.dir = c("qort_out/SRR8367773_control","qort_out/SRR8367783_control", "qort_out/SRR8367785_control", "qort_out/SRR8367786_control", "qort_out/SRR8367787_control", "qort_out/SRR8367789_control", "qort_out/SRR8368044_BP1", "qort_out/SRR8368044_BP1", "qort_out/SRR8368048_BP1", "qort_out/SRR8368055_BP1", "qort_out/SRR8368061_BP1", "qort_out/SRR8368072_BP1"));
+
+decoder <- completeAndCheckDecoder(incompleteDecoder)
+```
+
+```{r, message=FALSE}
+# read in qort results
+res <- read.qc.results.data("/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project/",
+decoder = decoder,
+calc.DESeq2 = TRUE, calc.edgeR = TRUE)
+
+# generate multi-plot figures (do once)
+# makeMultiPlot.all(res,
+# outfile.dir = "/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project/qort_out/summaryPlots/",
+# plot.device.name = "png")
+```
+![](/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project/qort_out/summaryPlots/plot-colorByGroup.png)
+The Phred quality score looks good for all samples as does gene body coverage. Some issues are that one experimental sample has very high MT content. This might explain why we get really high read counts in that sample for SRR8368044_BP1. We also see that most of the experimental groups have a spike in GC content. This seems strange and might mean some kind of contamination or maybe some biological effect. 
+
+run deSeq2 for processing
+```{r, message=FALSE}
+library(ggplot2); theme_set(theme_bw(base_size = 16))
+library(magrittr)
+library(DESeq2)
+# fix column names
+orig_names <- names(read_counts)
+sample_names <- gsub("^alignments\\.|\\.Aligned.*$", "", orig_names)
+names(read_counts) <- sample_names
+row.names(read_counts) <- make.names(read_counts$Geneid)
+# get rid of unnecessary columns
+readcounts <- read_counts[ , -c(1:6)]
+# get sample infor
+sample_info <- data.frame(condition = gsub("SRR[0-9]+_", "", names(readcounts)), row.names = names(readcounts))
+sample_info
+# make Deseq object
+DESeq.ds <- DESeqDataSetFromMatrix(countData = as.matrix(readcounts),
+colData = sample_info,
+design = ~ condition)
+DESeq.ds
+```
+
+```{r}
+colSums(counts(DESeq.ds)) %>% barplot(las = 2)
+# remove genes with no reads
+keep_genes <- rowSums(counts(DESeq.ds)) > 0
+DESeq.ds <- DESeq.ds[ keep_genes, ]
+```
+
+Normalize for sequence depth
+```{r}
+# assign the log counts and log norm counts to a distinct matrix within the DESeq.ds object
+assay(DESeq.ds, "log.counts") <- log2(counts(DESeq.ds, normalized = FALSE) + 1)
+assay(DESeq.ds, "log.norm.counts") <- log2(counts(DESeq.ds, normalized=TRUE) + 1)
+
+## normalized read counts
+assay(DESeq.ds, "log.norm.counts") <- log2(counts(DESeq.ds, normalized=TRUE) + 1)
+par(mfrow=c(1,2))
+DESeq.ds[, c("WT_1","WT_2")] %>%
+assay(., "log.norm.counts") %>%
+assay(DESeq.ds, "log.counts") <- log2(counts(DESeq.ds, normalized = FALSE) + 1)
+DESeq.ds <- estimateSizeFactors(DESeq.ds)
+plot( sizeFactors(DESeq.ds), colSums(counts(DESeq.ds)), # assess them
+ylab = "library sizes", xlab = "size factors", cex = .6 )
+```
+```{r}
+counts.sf_normalized <- counts(DESeq.ds, normalized=TRUE)
+boxplot(counts(DESeq.ds), main = "read counts only", cex = .6, las = 2)
+boxplot(counts.sf_normalized, main = "SF normalized", cex = .6, las =2)
+
+```
+
+We can see that in the first BP1 sample some genes have a huge number of read counts which we saw in the QC. After normalization, the counts actually go up, meaning that this sample had a large number of read counts and low size factors. It seems that this sample has a higher proportion of highly expressed genes compared to the other samples.  
+
+```{r}
+# reduce the dependence of the variance
+DESeq.rlog <- rlog(DESeq.ds, blind = TRUE)
+
+# plot to view difference in variance
+plot(assay(DESeq.ds, "log.norm.counts")[,1:2], cex=.1, main = "size factor and log2-transformed")
+plot(assay(DESeq.rlog)[,1:2],
+cex=.1, main = "rlog transformed",
+xlab = colnames(assay(DESeq.rlog[,1])),
+ylab = colnames(assay(DESeq.rlog[,2])) )
+```
+
+```{r}
+plotPCA(DESeq.rlog)
+```
+
+If we look at the PC1 with 89% of the variance, we can see that most of the BP1 and control samples cluster together except one control sample that clusters close to the BP1 samples. With regards to PC2, although it holds much less variance, we see another outlier in the BP1 group that is far above the other BP1 samples. 
+
+

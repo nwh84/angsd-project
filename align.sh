@@ -12,7 +12,7 @@
 
 mamba activate angsd
 
-# read in comman line arguments
+# read in command line arguments
 gen_dir=$1
 fastq_files=$2
 out_dir_prefix=$3

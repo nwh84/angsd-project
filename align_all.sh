@@ -16,7 +16,7 @@ do
     basename=$(basename "$file")  # Extracts file name with extension
     basename="${basename%%_*}"  # Removes extension
     echo "$basename"
-    # performs alignment if alignment file doesn't exist
+    # perform alignment if alignment file doesn't exist
     if [ ! -e ${SCRATCH_DIR}/"alignments"/${basename}".Aligned.sortedByCoord.out.bam" ]; then
         echo "does not exist"
         echo "$file /athena/angsd/scratch/naw4005/"${basename}"_2.fastq.gz"
