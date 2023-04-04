@@ -165,6 +165,17 @@ xlab = colnames(assay(DESeq.rlog[,1])),
 ylab = colnames(assay(DESeq.rlog[,2])) )
 ```
 
+Sample clustering
+```{r}
+library("pheatmap")
+sampleDists <- dist(t(assay(DESeq.rlog)))
+sampleDistMatrix <- as.matrix(sampleDists)
+pheatmap(sampleDistMatrix)
+```
+
+The heatmaps shows fairly predictable behavior except for the one control sample that clusters more closely with the BP1 samples than the control. We can also see that most of the BP1 samples are more closely correlated with each other than the control samples are. 
+
+
 ```{r}
 plotPCA(DESeq.rlog)
 ```
