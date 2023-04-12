@@ -33,14 +33,3 @@ do
   /athena/angsd/scratch/naw4005/qort_out/$line/
 done < "uniqueID_list.txt"
 
-# run qorts for all bam files in specified directory
-# for file in $qc_dir/*Aligned.sortedByCoord.out.bam
-# do 
-#    echo $file
-#    qorts QC \
-#    -Xmx5G \
-#    --stranded \
-#    $file \
-#    /athena/angsd/scratch/naw4005/hg38.ensGene.gtf \
-#    /athena/angsd/scratch/naw4005/qort_out
-#done
