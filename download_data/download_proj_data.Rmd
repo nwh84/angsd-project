@@ -1,0 +1,236 @@
+---
+title: "Download Project Data"
+author: "Noelle Wheeler"
+date: "2023-02-21"
+output: html_document
+---
+#### 1. Download at least one FASTQ file that you will be working with for your project.
+```{}
+cd /athena/angsd/scratch/naw4005
+wget ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR836/003/SRR8367773/SRR8367773.fastq.gz
+wget ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR836/003/SRR8367773/SRR8367773_1.fastq.gz
+wget ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR836/003/SRR8367773/SRR8367773_2.fastq.gz
+```
+SRR8367773_1 and SRR8367773_2 represent paired end reads. SRR8367773 has both in a single file.\
+
+- Where did you get it from?\
+I got this data from the European Nucleotide Archive browser using the SRR number found in the SRA link from the sample originally listed in the Gene Expression Omnibus website. The series of links is listed below.\
+https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE124326 \
+https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM3529118 \
+https://www.ncbi.nlm.nih.gov/sra?term=SRX5177983 \
+Using the SRR number from the link above:\
+https://www.ebi.ac.uk/ena/browser/view/SRR8367773 \
+- What publication is it linked to?\
+It is linked to the paper *Whole blood transcriptome analysis in bipolar disorder reveals strong lithium effect.*
+https://doi.org/10.1017/S0033291719002745 \
+- Who generated this data?\
+This data was generated at UCLA by Professor Roel A. Ophoff.\
+- How was the RNA extracted?\
+The RNA was extracted using the PAXgene isolation kit.
+- What library prep was used?\
+TruSeq Stranded RNA plus Ribo-Zero Gold library prep kit to remove ribosomal and globin RNA to enrich for messenger and noncoding RNAs.\
+- What cell type was used?\
+Whole blood cells were used.\
+- What was the treatment/experimental conditions?\
+They had 240 clinically diagnosed bipolar I patients and 240 control patients. Some bipolar patients were using a lithium treatment and some were not.\
+- What sequencing platform was used?\
+Illumina HiSeq 2500 was used for sequencing.\
+
+#### 2. Align the FASTQ file with an appropriate aligner (you may have to build a new index). Document.
+
+Download the hg38 reference genome and gtf file.
+```{}
+#! /bin/bash -l
+#SBATCH --partition=angsd_class
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --job-name="download_gen"
+#SBATCH --time=24:0:00 # HH/MM/SS
+#SBATCH --mem=4G # memory requested, units available: K,M,G,T
+#SBATCH --mail-user=naw4005@med.cornell.edu
+#SBATCH --mail-type=ALL
+#SBATCH --requeue
+
+if [ ! -r /athena/angsd/scratch/naw4005/hg38.fa.gz ] && [ ! -r /athena/angsd/scratch/naw4005/hg38.fa ]; then
+  wget https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/latest/hg38.fa.gz -P /athena/angsd/scratch/naw4005/
+fi
+
+if [ ! -r /athena/angsd/scratch/naw4005/hg38.ensGene.gtf.gz ] && [ ! -r /athena/angsd/scratch/naw4005/hg38.ensGene.gtf ]; then
+  wget https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/hg38.ensGene.gtf.gz -P /athena/angsd/scratch/naw4005/
+fi
+
+```
+Unzip genome
+```{}
+#! /bin/bash -l
+#SBATCH --partition=angsd_class
+#SBATCH --nodes=1#SBATCH --ntasks=1
+#SBATCH --job-name="unzip"
+#SBATCH --time=24:0:00 # HH/MM/SS
+#SBATCH --mem=4G # memory requested, units available: K,M,G,T
+#SBATCH --mail-user=naw4005@med.cornell.edu
+#SBATCH --mail-type=ALL
+#SBATCH --requeue
+
+if [ -r /athena/angsd/scratch/naw4005/hg38.fa.gz ] && [ ! -r /athena/angsd/scratch/naw4005/hg38.fa ]; then
+  gunzip /athena/angsd/scratch/naw4005/hg38.fa.gz
+fi
+
+if [ -r /athena/angsd/scratch/naw4005/hg38.ensGene.gtf.gz ] && [ ! -r /athena/angsd/scratch/naw4005/hg38.ensGene.gtf ]; then
+  gunzip /athena/angsd/scratch/naw4005/hg38.ensGene.gtf.gz
+fi
+```
+
+Generate genome index
+```{}
+#! /bin/bash -l
+#SBATCH --partition=angsd_class
+#SBATCH --nodes=1#SBATCH --ntasks=1
+#SBATCH --job-name="gen_ind"
+#SBATCH --cpus-per-task=8
+#SBATCH --time=24:0:00 # HH/MM/SS
+#SBATCH --mem=40G # memory requested, units available: K,M,G,T
+#SBATCH --mail-user=naw4005@med.cornell.edu
+#SBATCH --mail-type=ALL
+#SBATCH --requeue
+
+mamba activate angsd
+
+# read in comman line arguments
+dir_name=$1
+fasta_files=$2
+GTF_file=$3
+read_len=$4
+arg_count=$#
+
+# calculate overhang length
+overhang=$(($read_len - 1))
+
+# check we have the right number of command line arguments
+if [ $arg_count -lt 4 ]; then
+  echo "Not enough command line arguments. Exiting ..."
+  echo "Usage: generate_ind.sh <STAR_alignment_dir> <genome_fasta_file> <GTF_file> <read_length>"
+  exit
+fi
+
+# make directory if it does not exist
+if [ ! -d ${dir_name} ]; then
+  mkdir ${dir_name}
+fi
+
+# generate genome index
+STAR --runMode genomeGenerate\
+  --runThreadN 8\
+  --genomeDir ${dir_name}\
+  --genomeFastaFiles ${fasta_files}\
+  --sjdbGTFfile ${GTF_file}\
+  --sjdbOverhang ${overhang}
+```
+Run script
+```{}
+sbatch generate_ind.sh /athena/angsd/scratch/naw4005/hg38_ind /athena/angsd/scratch/naw4005/hg38.fa /athena/angsd/scratch/naw4005/hg38.ensGene.gtf 50
+```
+Run fastQC
+```{}
+srun -n1 --pty --partition=angsd_class --mem=4G bash -i
+mamba activate angsd
+fastqc /athena/angsd/scratch/naw4005/SRR8367773_1.fastq.gz --extract
+fastqc /athena/angsd/scratch/naw4005/SRR8367773_2.fastq.gz --extract
+```
+The results of fastQC show that the both fastq files have fairly good sequence quality. 
+
+#### Quality scores for SRR8367773_1.fastq:
+
+![](/Users/noelawheeler/Desktop/Analysis of next gen seq data/download_proj_data/read quality fastqc_1.png)
+
+#### Quality scores for SRR8367773_2.fastq:
+
+![](/Users/noelawheeler/Desktop/Analysis of next gen seq data/download_proj_data/read quality fastq_2.png)
+The only issue we see is with GC content.
+
+#### GC content SRR8367773_1.fastq: 
+![](/Users/noelawheeler/Desktop/Analysis of next gen seq data/download_proj_data/gc content fastqc_1.png)
+
+#### GC content SRR8367773_2.fastq:
+![](/Users/noelawheeler/Desktop/Analysis of next gen seq data/download_proj_data/gc content fastqc_2.png)
+This implies there is some adapter contamination. Since STAR automatically performs softclipping for adapter contamination, I felt that the reads were good enough quality to perform alignment. 
+
+Align to reference genome
+```{}
+#! /bin/bash -l
+#SBATCH --partition=angsd_class
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --job-name="align"
+#SBATCH --time=24:0:00 # HH/MM/SS
+#SBATCH --mem=40G # memory requested, units available: K,M,G,T
+#SBATCH --mail-user=naw4005@med.cornell.edu
+#SBATCH --mail-type=ALL
+#SBATCH --requeue
+
+mamba activate angsd
+
+# read in comman line arguments
+gen_dir=$1
+fastq_files=$2
+out_dir_prefix=$3
+arg_count=$#
+out_dir="$(dirname "${out_dir_prefix}")"
+
+# check we have the right number of command line arguments
+if [ $arg_count -lt 3 ]; then
+  echo "Not enough command line arguments. Exiting ..."
+  echo "Usage: align.sh <genome_index_directory> <fastq_files> <out_directory_prefix>"
+  exit
+fi
+
+# make directory if it does not exist
+if [ ! -d ${out_dir} ]; then
+  mkdir ${out_dir}
+fi
+
+STAR --runMode alignReads \
+ --runThreadN 8 \
+ --genomeDir ${gen_dir} \
+ --readFilesIn ${fastq_files} \
+ --readFilesCommand zcat \
+ --outFileNamePrefix ${out_dir_prefix} \
+ --outSAMtype BAM SortedByCoordinate \
+```
+Run alignment
+```{}
+sbatch align.sh "/athena/angsd/scratch/naw4005/hg38_ind" "/athena/angsd/scratch/naw4005/SRR8367773_1.fastq.gz /athena/angsd/scratch/naw4005/SRR8367773_2.fastq.gz" "/athena/angsd/scratch/naw4005/alignments/SRR8367773."
+```
+Parameters changed: 
+I added both reads in separated by a space because these are paired end reads.
+I kept default alignIntronMax and alignIntronMin because they are already tuned for human samples. 
+I chose the outSAMtype to be be a BAM file that is sorted by coordinate because BAM files are compressed and because the sorting makes it easier to work with after alignment. 
+
+Summary of outcome and basic QC
+```{}
+mamba activate angsd
+samtools view -H /athena/angsd/scratch/naw4005/alignments/SRR8367773.Aligned.sortedByCoord.out.bam | less
+samtools index /athena/angsd/scratch/naw4005/alignments/SRR8367773.Aligned.sortedByCoord.out.bam
+# basic QC using samtools
+samtools flagstat /athena/angsd/scratch/naw4005/alignments/SRR8367773.Aligned.sortedByCoord.out.bam > SRR8367773.flagstats
+samtools stats /athena/angsd/scratch/naw4005/alignments/SRR8367773.Aligned.sortedByCoord.out.bam > SRR8367773.stats
+```
+The flagstats file shows that 65005846 reads passed QC and 0 reads failed QC. It also shows that 39421296 QC-passed reads were properly paired 0 QC-failed reads were properly paired. There were 0 singletons and 0 reads with mate mapped to a different chromosome. 
+It seems that alignment passed the necessary QC checks.  
+
+Run multiQC to visualize QC 
+```{}
+mamba activate multiqc
+multiqc -n SRR8367773.multiqc /athena/angsd/scratch/naw4005/
+```
+| Sample Name | % Aligned | M Aligned | % Dups | % GC | M Seqs |
+|:-----------:|:---------:|:---------:|:------:|:----:|:------:|
+|   SRR8367773|  79.8%.   |    16.2   |        |      |        |
+|SRR8367773_1 |           |           |   5.6% |  46% | 20.3   |
+|SRR8367773_2 |           |           | 6.2%   |  47% |  20.3  |
+
+![](/Users/noelawheeler/Desktop/Analysis of next gen seq data/download_proj_data/star_alignment_plot.png)
+
+
+
