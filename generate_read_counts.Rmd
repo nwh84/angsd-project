@@ -17,7 +17,7 @@ $ sbatch align_all.sh
 ```{}
 sbatch run_fastQC.sh $SCRATCH_DIR/fastqc_out
 ```
-[multiQC-output](https://htmlpreview.github.io/?https://github.com/nwh84/angsd-project/blob/main/multiqc.ouput.html)
+[multiQC-output](https://htmlpreview.github.io/?https://github.com/nwh84/angsd-project/blob/main/QC/multiqc.ouput.html)
 
 Output .html file in github
 This shows the summary of the samtools output and the multiqc output. We can see that SRR8368044_BP1 has far more reads mapped than the other samples. However, the total sequences count for the paired end reads looks similar to the other sequences. The high number of mapped reads may be due to a high level of PCR duplication or because the sample has many repetitive regions. When we look at fastQC results, we don't see high levels of duplicate reads for this sample, so PCR duplication is probably not the culprit.
@@ -52,7 +52,7 @@ alignments/SRR8368048_BP1.Aligned.sortedByCoord.out.bam
 alignments/SRR8368055_BP1.Aligned.sortedByCoord.out.bam
 alignments/SRR8368061_BP1.Aligned.sortedByCoord.out.bam
 alignments/SRR8368072_BP1.Aligned.sortedByCoord.out.bam
-alignments/SRR8368152_BP1.Aligned.sortedByCoord.out.bam -s 1 -p --countReadPairs -C
+alignments/SRR8368152_BP1.Aligned.sortedByCoord.out.bam -s 2 -p --countReadPairs -C
 ```
 
 parameters: 
@@ -148,6 +148,20 @@ boxplot(counts.sf_normalized, main = "SF normalized", cex = .6, las =2)
 ```
 
 We can see that in the first BP1 sample some genes have a huge number of read counts which we saw in the QC. After normalization, the counts actually go up, meaning that this sample had a large number of read counts and low size factors. It seems that this sample has a high proportion of highly expressed genes and high variance in gene expression.  
+
+Look at log scaled axis
+```{r}
+par(mfrow=c(1,2)) # to plot the two box plots next to each other
+## bp of non-normalized
+boxplot(log2(counts(DESeq.ds) +1), notch=TRUE,
+main = "Non-normalized read counts",
+ylab ="log2(read counts)", cex = .6, las = 2)
+## bp of size-factor normalized values
+boxplot(log2(counts(DESeq.ds, normalized=TRUE) +1), notch=TRUE,
+main = "Size-factor-normalized read counts",
+ylab ="log2(read counts)", cex = .6, las = 2)
+```
+
 
 ```{r}
 # assign the log counts and log norm counts to a distinct matrix within the DESeq.ds object
