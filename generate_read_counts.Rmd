@@ -83,16 +83,14 @@ type="source")
 library(QoRTs)
 # make decoder file
 incompleteDecoder <- data.frame(unique.ID = c("SRR8367773_control","SRR8367783_control","SRR8367785_control", "SRR8367786_control", "SRR8367787_control", "SRR8367789_control", "SRR8368044_BP1", "SRR8368048_BP1", "SRR8368055_BP1", "SRR8368061_BP1", "SRR8368072_BP1", "SRR8368152_BP1"),
-group.ID = c("CONTROL","CONTROL","CONTROL","CONTROL","CONTROL","CONTROL","CASE","CASE","CASE","CASE","CASE","CASE"),  qc.data.dir = c("qort_out/SRR8367773_control","qort_out/SRR8367783_control", "qort_out/SRR8367785_control", "qort_out/SRR8367786_control", "qort_out/SRR8367787_control", "qort_out/SRR8367789_control", "qort_out/SRR8368044_BP1", "qort_out/SRR8368044_BP1", "qort_out/SRR8368048_BP1", "qort_out/SRR8368055_BP1", "qort_out/SRR8368061_BP1", "qort_out/SRR8368072_BP1"));
+group.ID = c("CONTROL","CONTROL","CONTROL","CONTROL","CONTROL","CONTROL","CASE","CASE","CASE","CASE","CASE","CASE"),  qc.data.dir = c("qort_out/SRR8367773_control","qort_out/SRR8367783_control", "qort_out/SRR8367785_control", "qort_out/SRR8367786_control", "qort_out/SRR8367787_control", "qort_out/SRR8367789_control", "qort_out/SRR8368044_BP1", "qort_out/SRR8368048_BP1", "qort_out/SRR8368055_BP1", "qort_out/SRR8368061_BP1", "qort_out/SRR8368072_BP1", "qort_out/SRR8368052_BP1"));
 
 decoder <- completeAndCheckDecoder(incompleteDecoder)
 ```
 
 ```{r, message=FALSE}
 # read in qort results
-res <- read.qc.results.data("/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project/",
-decoder = decoder,
-calc.DESeq2 = TRUE, calc.edgeR = TRUE)
+res <- read.qc.results.data("/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project", decoder = decoder, calc.DESeq2 = TRUE, calc.edgeR = TRUE)
 
 # generate multi-plot figures (do once)
 # makeMultiPlot.all(res,
@@ -124,8 +122,24 @@ design = ~ condition)
 DESeq.ds
 ```
 
+
+
 ```{r}
-colSums(counts(DESeq.ds)) %>% barplot(las = 2)
+# option to drop sample SRR8368044_BP1 because of mitochondrial contamination
+readcounts %<>% dplyr::select(-SRR8368044_BP1)
+# create new sample_info object
+sample_info <- data.frame(condition = gsub("SRR[0-9]+_", "", names(readcounts)), row.names = names(readcounts))
+# new deseq object
+DESeq.ds <- DESeqDataSetFromMatrix(countData = as.matrix(readcounts),
+colData = sample_info,
+design = ~ condition)
+DESeq.ds
+```
+
+
+```{r}
+val <- colSums(counts(DESeq.ds))
+barplot(val, las = 2)
 # remove genes with no reads
 keep_genes <- rowSums(counts(DESeq.ds)) > 0
 DESeq.ds <- DESeq.ds[ keep_genes, ]
@@ -140,6 +154,7 @@ DESeq.ds <- estimateSizeFactors(DESeq.ds)
 plot( sizeFactors(DESeq.ds), colSums(counts(DESeq.ds)), # assess them
 ylab = "library sizes", xlab = "size factors", cex = .6 )
 ```
+
 ```{r}
 counts.sf_normalized <- counts(DESeq.ds, normalized=TRUE)
 boxplot(counts(DESeq.ds), main = "read counts only", cex = .6, las = 2)
@@ -147,7 +162,7 @@ boxplot(counts.sf_normalized, main = "SF normalized", cex = .6, las =2)
 
 ```
 
-We can see that in the first BP1 sample some genes have a huge number of read counts which we saw in the QC. After normalization, the counts actually go up, meaning that this sample had a large number of read counts and low size factors. It seems that this sample has a high proportion of highly expressed genes and high variance in gene expression.  
+We can see that a lot of the samples have pretty extreme outliers. Ater normalization these go down somewhat, although we still see very high counts for the one SRR8368061_BP1 largest outlier gene. 
 
 Look at log scaled axis
 ```{r}
@@ -157,12 +172,15 @@ boxplot(log2(counts(DESeq.ds) +1), notch=TRUE,
 main = "Non-normalized read counts",
 ylab ="log2(read counts)", cex = .6, las = 2)
 ## bp of size-factor normalized values
+
 boxplot(log2(counts(DESeq.ds, normalized=TRUE) +1), notch=TRUE,
-main = "Size-factor-normalized read counts",
-ylab ="log2(read counts)", cex = .6, las = 2)
+        main = "Size-factor-normalized read counts",
+        ylab ="log2(read counts)", cex = .6, las = 2,
+        mar = c(10, 4, 4, 2), cex.axis = 0.8)
 ```
 
 
+When we view these on a log scale the samples look more similarly distributed than before.  
 ```{r}
 # assign the log counts and log norm counts to a distinct matrix within the DESeq.ds object
 assay(DESeq.ds, "log.counts") <- log2(counts(DESeq.ds, normalized = FALSE) + 1)
@@ -181,7 +199,7 @@ ylab = colnames(assay(DESeq.rlog[,2])) )
 
 Sample clustering
 ```{r}
-library("pheatmap")
+library(pheatmap)
 sampleDists <- dist(t(assay(DESeq.rlog)))
 sampleDistMatrix <- as.matrix(sampleDists)
 pheatmap(sampleDistMatrix)
@@ -194,6 +212,175 @@ The heatmaps shows fairly predictable behavior except for the one control sample
 plotPCA(DESeq.rlog)
 ```
 
-If we look at the PC1 with 89% of the variance, we can see that most of the BP1 and control samples cluster together except one control sample that clusters close to the BP1 samples. With regards to PC2, although it holds much less variance, we see another outlier in the BP1 group that is far above the other BP1 samples. 
+If we look at the PC1 with 60% of the variance, we can see that most of the BP1 and control samples cluster together except one control sample that clusters close to the BP1 samples. With regards to PC2, we do not really see clustering between samples. 
+
+
+Perform differential expression analysis
+```{r}
+# put control samples as baseline
+DESeq.ds$condition %<>% relevel(ref="control")
+# check that contrast is set up correctly
+if (design(DESeq.ds) != ~condition){
+  print("We want condition to be fixed effect in DESeq.ds")
+}
+# final steps in testing differential expression 
+DESeq.ds %<>% estimateDispersions()
+DESeq.ds %<>% nbinomWaldTest()
+DESeq.ds
+```
+
+Raw distribution of P-values
+```{r}
+rowData(DESeq.ds)@listData[["WaldPvalue_condition_BP1_vs_control"]] %>% hist(main="Raw p-values for BP1 vs control")
+```
+
+```{r}
+DGE.results <- results(DESeq.ds, independentFiltering = TRUE, alpha = 0.05)
+head(DGE.results)
+summary(DGE.results)
+DGE.results$padj %>% hist(breaks=19, main="Adjusted p-values for control vs BP1")
+```
+We can see that less genes that are now significant which is the expected result.
+
+Find important genes
+```{r}
+DGE.results.sorted <- DGE.results %>% `[`(order(.$padj),)
+head(DGE.results.sorted)
+```
+```{r}
+par(mfrow=c(1,2))
+plotCounts(DESeq.ds, gene="ENSG00000198695", normalized = TRUE, xlab="")
+plotCounts(DESeq.ds, gene = which.max(DGE.results$padj), xlab="",
+main = "Gene with max. p.adj.\n(=least significant)")
+```
+
+heatmap of differentially expressed genes
+```{r}
+library(pheatmap)
+# identify genes with the desired adjusted p-value cut-off
+DGEgenes <- rownames(subset(DGE.results.sorted, padj < 0.05))
+rlog.dge <- DESeq.rlog[DGEgenes,] %>% assay
+pheatmap(rlog.dge, scale="row",
+show_rownames=FALSE, main="DGE (row-based z-score)")
+```
+
+```{r}
+# BiocManager::install("EnhancedVolcano")
+library(EnhancedVolcano)
+vp1 <- EnhancedVolcano(DGE.results,
+lab=rownames(DGE.results),
+x='log2FoldChange', y='padj',
+xlim = c(-10,10),
+pCutoff=0.05,
+title="SNF2 / WT")
+#print(vp1)
+```
+
+Shrink logFC values of low/noisily expressed genes
+```{r}
+# install.packages("patchwork")
+# BiocManager::install("apeglm")
+DGE.results.shrink <- lfcShrink(DESeq.ds, coef=2, type="apeglm")
+vp2 <- EnhancedVolcano(DGE.results.shrink, lab = rownames(DGE.results.shrink), x = "log2FoldChange", y='padj', title="with logFC shrinkage")
+library(patchwork)
+vp1 + vp2
+```
+
+```{r}
+#BiocManager::install("org.Hs.eg.db")
+library(org.Hs.eg.db)
+human <- org.Hs.eg.db
+# gene_symbols <- mapIds(org.Hs.eg.db, keys=ensembl_ids, column="SYMBOL", keytype="ENSEMBL")
+annot.DGE <- select(human, keys=rownames(DGE.results.shrnk),
+keytype="ENSEMBL", columns="SYMBOL")
+head(annot.DGE)
+```
+
+Find names of most differentially expressed genes
+```{r}
+# add ENSEMBL as column instead of rowname
+DGE.results.sorted$ENSEMBL <- rownames(DGE.results.sorted)
+rownames(DGE.results.sorted) <- NULL
+# merge annotation and DGE results on common column ENSEMBL
+DGE.results.annot <- merge(as.data.frame(DGE.results.sorted), annot.DGE, by = "ENSEMBL", all = TRUE)
+# sort results by p-values
+DGE.annot.sorted <- DGE.results.annot %>% `[`(order(.$padj),)
+head(DGE.annot.sorted)
+```
+The most important differentially expressed genes are NADH dehydrogenase subunit 6, small nucleolar RNA, H/ACA box 53, NADH dehydrogenase subunit 5, and calcium voltage-gated channel subunit alpha1 E. A lot of these are mitochondrial genes.
+
+
+Find genes that are highly expressed in the SRR8368152_BP1 sample because it has so many more counts than the other samples.
+```{r}
+counts_bp1 <- counts(DESeq.ds)[, "SRR8368152_BP1"]
+df_bp1 <- as.data.frame(counts_bp1)
+df_bp1$ENSEMBL <- rownames(df_bp1)
+rownames(df_bp1) <- NULL
+# merge annotation and DGE results on common column ENSEMBL
+annot.onesample <- merge(df_bp1, annot.DGE, by = "ENSEMBL", all = TRUE)
+onesample.counts <- annot.onesample[order(-annot.onesample[,2]),]
+head(onesample.counts)
+```
+```{r}
+# run gsea
+# get just gene symbol and log fold change 
+#BiocManager::install("fgsea")
+library(fgsea)
+# take only symbol and log fold change from deg result
+# take average of duplicate genes
+res <- DGE.annot.sorted %>% dplyr::select(SYMBOL, log2FoldChange) %>% 
+  na.omit() %>% dplyr::group_by(SYMBOL) %>% dplyr::summarize(log2FoldChange=mean(log2FoldChange))
+
+# turn list into dataframe
+ranks <- tibble::deframe(res)
+# head(ranks, 20)
+
+# import pathways file to use
+pathways.hallmark <- gmtPathways("/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project/h.all.v2023.1.Hs.symbols.gmt")
+# check pathways look fine 
+pathways.hallmark %>% head() %>% lapply(head)
+
+# run gsea
+fgsea.res <- fgseaMultilevel(pathways=pathways.hallmark, stats=ranks)
+# select certain columns and rank by p value
+fgsea.res.order <- fgsea.res %>% dplyr::select(-log2err, -ES, -leadingEdge, ) %>% dplyr::arrange(padj)
+head(fgsea.res.order)
+```
+
+```{r}
+# view results of gsea normalized enrichment score
+library(ggplot2)
+# only look at pathways with NES > 0 and NES != na
+visualize.fgsea <- fgsea.res.order %>% na.omit(.)
+
+# plot
+head(visualize.fgsea)
+ggplot(visualize.fgsea, aes(reorder(pathway, NES), NES)) +
+geom_col(aes(fill=padj<0.05)) + coord_flip() + labs(x="Pathway", y="Normalized Enrichment Score", title="Hallmark pathways from GSEA") + theme(text = element_text(size = 6))
+```
+```{r}
+# try kegg pathway
+pathways.kegg <- gmtPathways("/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project/c2.cp.kegg.v2023.1.Hs.symbols.gmt")
+# check pathways look fine 
+pathways.kegg %>% head() %>% lapply(head)
+
+# run gsea
+fgsea.kegg <- fgseaMultilevel(pathways=pathways.kegg, stats=ranks)
+# select certain columns and rank by p value
+fgsea.res.order <- fgsea.kegg %>% dplyr::select(-log2err, -ES, -leadingEdge, ) %>% dplyr::arrange(padj)
+head(fgsea.res.order)
+# remove na
+visualize.kegg <- fgsea.res.order %>% na.omit(.)
+
+# plot
+ggplot(visualize.kegg, aes(reorder(pathway, NES), NES)) +
+geom_col(aes(fill=padj<0.05)) + coord_flip() + labs(x="Pathway", y="Normalized Enrichment Score", title="Hallmark pathways from GSEA") + theme(text = element_text(size = 3))
+```
+```{r}
+visualize.kegg
+```
+```{r}
+plotEnrichment(pathways.kegg[["KEGG_NEUROACTIVE_LIGAND_RECEPTOR_INTERACTION"]], ranks) + labs(title="Neuroactive ligand receptor pathway")
+```
 
 
