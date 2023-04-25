@@ -90,7 +90,7 @@ decoder <- completeAndCheckDecoder(incompleteDecoder)
 
 ```{r, message=FALSE}
 # read in qort results
-res <- read.qc.results.data("/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project", decoder = decoder, calc.DESeq2 = TRUE, calc.edgeR = TRUE)
+#res <- read.qc.results.data("/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project", decoder = decoder, calc.DESeq2 = TRUE, calc.edgeR = TRUE)
 
 # generate multi-plot figures (do once)
 # makeMultiPlot.all(res,
@@ -291,7 +291,7 @@ vp1 + vp2
 library(org.Hs.eg.db)
 human <- org.Hs.eg.db
 # gene_symbols <- mapIds(org.Hs.eg.db, keys=ensembl_ids, column="SYMBOL", keytype="ENSEMBL")
-annot.DGE <- select(human, keys=rownames(DGE.results.shrnk),
+annot.DGE <- select(human, keys=rownames(DGE.results.shrink),
 keytype="ENSEMBL", columns="SYMBOL")
 head(annot.DGE)
 ```
