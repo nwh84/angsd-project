@@ -1,0 +1,271 @@
+---
+title: "Final Report"
+author: "Noelle Wheeler"
+date: "2023-04-25"
+output: html_document
+---
+
+### Introduction
+In this project I am addressing the question of whether whole blood cells show differential gene expression between control samples and Bipolar Disorder 1 patient samples and which genes are most differentially expressed. I hypothesized that there is differential gene expression between the experiment and control groups. I chose this topic because psychological disorders such as bipolar disorder are complex, difficult to treat, and very heritable. Our understanding of what causes them is still rudimentary, and there is so much left to be discovered. 
+
+Bipolar disorder is a disorder characterized by extreme changes in mood from energized manic episodes to depressive episodes (Park, 2022). Past studies have examine differential gene expression in postmortem brain samples. One study found 2,191 unique genes with significantly altered expression levels in brains that had not been exposed to antipsychotic medication (Chen, 2013). This result contributed to the hypothesis of synaptic and intercellular communication impairment in BP. A transcriptome wide study of peripheral blood in bipolar samples using array data from different studies showed that nineteen genes and four gene modules were significantly differentially expressed in bipolar cases. In the study where I got my RNA-sequencing data they performed differential expression analysis from whole blood samples with 240 patient and 240 controls (Krebs, 2020). In their results they found large differences between patient and control but this was mostly linked to lithium treatment. Becuase prior literature showed that impact that medication can have on gene expression, I chose to only look at patients not using lithium medication for my analysis. 
+
+### Results
+![](/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project/volcano_plot.png)
+In my analysis I found very many significantly differentially expressed genes between the bipolar and control populations. My most significant genes were ND6, SNORA53, ND5, and CACNA1E. Interestingly, ND6 and ND5 are mitochondrial genes. ND6 is involved in mitochondrial electron transport, and ND5 is one of the enzymes needed for oxidative phosphorylation. SNORA53 is a small nucleolar RNA. CACNA1E encodes the alpha-1E subunit of the R-type calcium channels. This gene is highly expressed in the nervous system and pathogenic variants in the gene are linked to developmental and epileptic encephalopathies which are severe neurodevelopmental disorders (Helbig, 2018). Although this intuitively seems to be linked to our disease of interest, understanding the gene expression in blood, and not the nervous system, is difficult to interpret. It was interesting that two mitochondrial genes are significantly underexpressed in the experimental groups. This could be a result of technical biases in sequencing - there may have been insufficient removal of mitochondrial genes from the mitochondria or too many mitochondrial genes due to contamination. This could also have biological meaning that the control samples are more metabolically active for some reason. To me, this seemed more biological because when looking at the Qorts QC output the control samples did have slightly higher MT genes but only one seemed to show contamination (and this was removed). 
+
+![](/Users/noelawheeler/Desktop/Analysis of next gen seq data/kegg_plot.png)
+![Most significant pathways](/Users/noelawheeler/Desktop/Analysis of next gen seq data/kegg_pathways.png)
+Next I used GSEA to find enriched pathways. I found that pathways tended to be more under-enriched in the experimental groups and that many were significant. I found it interesting that "neuroactive ligand receptor" interaction was highly under-enriched since these are blood samples. I also found the calcium signaling pathway to be notable. Literature has shown that calcium levels are disrupted in BP and that calcium plays a critical role in neuronal exitation (Harrison, 2021). 
+
+Some limits of this analysis is that I only looked at 6 control and 6 experimental groups (5 after one was removed) which does not provide a very comprehensive analysis. Another limitation was that using STAR aligner the percent reads mapped was fairly low which seems strange. There is also a spike in GC content that corresponds with the BP samples. A future analysis is to determine what is causing this spike and, if it is not biological, to remove the effects of it.  
+
+### Methods
+
+- Download data\
+I chose to only download samples from females, age 18-45, non-smoking, non-lithium users. In this way I reduced the number of covariates in my data. 
+
+original link: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE124326\
+table of fastq links: https://github.com/nwh84/angsd-project/blob/main/download_data/data_url.csv\
+download script: https://github.com/nwh84/angsd-project/blob/main/download_data/download.sh
+```{}
+$ sbatch download.sh
+```
+
+- Align data\
+align script: https://github.com/nwh84/angsd-project/blob/main/align/align_all.sh
+```{}
+$ sbatch align_all.sh
+```
+I changed the thread parameter so that multiple files could be aligned at once. 
+I chose the outSamAttributes parameter to "all" so that there is more information for QC. For the rest I kept the default parameters.
+
+- Run fastqc\
+fastQC script: https://github.com/nwh84/angsd-project/blob/main/QC/run_fastQC.sh
+```{}
+sbatch run_fastQC.sh $SCRATCH_DIR/fastqc_out
+```
+
+[multiQC-output](https://htmlpreview.github.io/?https://github.com/nwh84/angsd-project/blob/main/QC/multiqc.ouput.html)
+
+This shows the summary of the samtools output and the multiqc output. We can see that SRR8368044_BP1 has far more reads mapped than the other samples. However, the total sequences count for the paired end reads looks similar to the other sequences. The high number of mapped reads may be due to a high level of PCR duplication, but when we look at fastQC results, we don't see high levels of duplicate reads for this sample. 
+
+We also see a spike in GC content for many on the experimental groups which might be due to contamination or a biological effect. 
+
+- Run Qorts\
+```{}
+$ mamba activate qorts
+$ sbatch run_qorts.sh $SCRATCH_DIR/alignments
+```
+
+- Qorts output\
+```{}
+library(QoRTs)
+# make decoder file
+incompleteDecoder <- data.frame(unique.ID = c("SRR8367773_control","SRR8367783_control","SRR8367785_control", "SRR8367786_control", "SRR8367787_control", "SRR8367789_control", "SRR8368044_BP1", "SRR8368048_BP1", "SRR8368055_BP1", "SRR8368061_BP1", "SRR8368072_BP1", "SRR8368152_BP1"),
+group.ID = c("CONTROL","CONTROL","CONTROL","CONTROL","CONTROL","CONTROL","CASE","CASE","CASE","CASE","CASE","CASE"),  qc.data.dir = c("qort_out/SRR8367773_control","qort_out/SRR8367783_control", "qort_out/SRR8367785_control", "qort_out/SRR8367786_control", "qort_out/SRR8367787_control", "qort_out/SRR8367789_control", "qort_out/SRR8368044_BP1", "qort_out/SRR8368048_BP1", "qort_out/SRR8368055_BP1", "qort_out/SRR8368061_BP1", "qort_out/SRR8368072_BP1", "qort_out/SRR8368052_BP1"));
+
+decoder <- completeAndCheckDecoder(incompleteDecoder)
+```
+
+```{}
+# read in qort results
+res <- read.qc.results.data("/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project", decoder = decoder, calc.DESeq2 = TRUE, calc.edgeR = TRUE)
+
+# generate multi-plot figures (do once)
+makeMultiPlot.all(res,
+outfile.dir = "/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project/qort_out/summaryPlots/",
+plot.device.name = "png")
+```
+![](/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project/qort_out/summaryPlots/plot-colorByGroup.png)
+
+The qorts output shows that alignent went fairly well. Again, we see the spike in GC content. One experimental sample has a huge number of mitochondrial reads. When I looked at each individual sample I could see that this was sample SRR8368044_BP1. This explains why read count is so high for this sample. I ran the analysis twice, once with this sample and once without, just to check that there wasn't any contamination throwing off the results. 
+
+- Rename Samples\
+```{}
+$ rename SRR8367773 SRR8367773_control SRR8367773*
+$ rename SRR8367783 SRR8367783_control SRR8367783*
+$ rename SRR8368044 SRR8368044_BP1 SRR8368044*
+$ rename SRR8368048 SRR8368048_BP1 SRR8368048*
+```
+Repeat for all samples
+
+- Generate read count table\
+```{}
+$ cd $SCRATCH_DIR
+$ featureCounts -a hg38.ensGene.gtf -o gene_counts/hg38_fc alignments/SRR8367773_control.Aligned.sortedByCoord.out.bam alignments/SRR8367783_control.Aligned.sortedByCoord.out.bam alignments/SRR8367785_control.Aligned.sortedByCoord.out.bam
+alignments/SRR8367786_control.Aligned.sortedByCoord.out.bam
+alignments/SRR8367787_control.Aligned.sortedByCoord.out.bam
+alignments/SRR8367789_control.Aligned.sortedByCoord.out.bam
+alignments/SRR8368044_BP1.Aligned.sortedByCoord.out.bam
+alignments/SRR8368048_BP1.Aligned.sortedByCoord.out.bam
+alignments/SRR8368055_BP1.Aligned.sortedByCoord.out.bam
+alignments/SRR8368061_BP1.Aligned.sortedByCoord.out.bam
+alignments/SRR8368072_BP1.Aligned.sortedByCoord.out.bam
+alignments/SRR8368152_BP1.Aligned.sortedByCoord.out.bam -s 2 -p --countReadPairs -C
+```
+I changed -s parameter to 2 denoting that this is stranded data. -p says that fragments will be counted instead of reads. --countReadPairs shows that this is paired end data. -C says that chimeric fragments (fragments with two ends mapping to different chromosomes) will not be counted. I chose not to include this because if they are aligned together it is probably a mistake. 
+
+-  Load read count table\
+```{r}
+read_counts_summary <- read.table('/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project/hg38_fc.summary')
+read_counts <- read.table('/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project/hg38_fc', header = TRUE)
+```
+
+- Run DESeq2 for processing\
+```{r, , message=FALSE}
+# take all samples
+library(ggplot2)
+library(magrittr)
+library(DESeq2)
+# fix column names
+orig_names <- names(read_counts)
+sample_names <- gsub("^alignments\\.|\\.Aligned.*$", "", orig_names)
+names(read_counts) <- sample_names
+row.names(read_counts) <- make.names(read_counts$Geneid)
+# get rid of unnecessary columns
+readcounts <- read_counts[ , -c(1:6)]
+# get sample infor
+sample_info <- data.frame(condition = gsub("SRR[0-9]+_", "", names(readcounts)), row.names = names(readcounts))
+sample_info
+# make Deseq object
+DESeq.ds <- DESeqDataSetFromMatrix(countData = as.matrix(readcounts),
+colData = sample_info,
+design = ~ condition)
+DESeq.ds
+```
+
+```{r}
+# remove sample SRR8368044_BP1
+readcounts %<>% dplyr::select(-SRR8368044_BP1)
+# create new sample_info object
+sample_info <- data.frame(condition = gsub("SRR[0-9]+_", "", names(readcounts)), row.names = names(readcounts))
+# new deseq object
+DESeq.ds <- DESeqDataSetFromMatrix(countData = as.matrix(readcounts),
+colData = sample_info,
+design = ~ condition)
+DESeq.ds
+```
+
+
+```{r}
+# remove genes with no reads
+keep_genes <- rowSums(counts(DESeq.ds)) > 0
+DESeq.ds <- DESeq.ds[ keep_genes, ]
+# calculate size factors
+DESeq.ds <- estimateSizeFactors(DESeq.ds)
+# assign the log counts and log norm counts
+assay(DESeq.ds, "log.counts") <- log2(counts(DESeq.ds, normalized = FALSE) + 1)
+assay(DESeq.ds, "log.norm.counts") <- log2(counts(DESeq.ds, normalized=TRUE) + 1)
+# reduce the dependence of the variance
+DESeq.rlog <- rlog(DESeq.ds, blind = TRUE)
+
+```
+```{r}
+plotPCA(DESeq.rlog)
+```
+
+From PCA we can see that the samples cluster fairly well. One control sample clusters more with the BP1 group that the control which is surprising.
+
+```{r}
+# perform differential analysis
+# put control samples as baseline
+DESeq.ds$condition %<>% relevel(ref="control")
+# check that contrast is set up correctly
+if (design(DESeq.ds) != ~condition){
+  print("We want condition to be fixed effect in DESeq.ds")
+}
+# final steps in testing differential expression 
+DESeq.ds %<>% estimateDispersions()
+DESeq.ds %<>% nbinomWaldTest()
+
+# adjust p value
+DGE.results <- results(DESeq.ds, independentFiltering = TRUE, alpha = 0.05)
+# find important genes
+DGE.results.sorted <- DGE.results %>% `[`(order(.$padj),)
+
+# volcano plot
+library(EnhancedVolcano)
+library(patchwork)
+vp1 <- EnhancedVolcano(DGE.results, lab=rownames(DGE.results), x='log2FoldChange', y='padj', xlim = c(-10,10), pCutoff=0.05, title="SNF2 / WT")
+DGE.results.shrink <- lfcShrink(DESeq.ds, coef=2, type="apeglm")
+vp2 <- EnhancedVolcano(DGE.results.shrink, lab = rownames(DGE.results.shrink), x = "log2FoldChange", y='padj', title="with logFC shrinkage")
+# output shown above
+#vp1 + vp2
+
+# get gene names
+library(org.Hs.eg.db)
+human <- org.Hs.eg.db
+annot.DGE <- select(human, keys=rownames(DGE.results.shrink),
+keytype="ENSEMBL", columns="SYMBOL")
+# add ENSEMBL as column instead of rowname
+DGE.results.sorted$ENSEMBL <- rownames(DGE.results.sorted)
+rownames(DGE.results.sorted) <- NULL
+# merge annotation and DGE results on common column ENSEMBL
+DGE.results.annot <- merge(as.data.frame(DGE.results.sorted), annot.DGE, by = "ENSEMBL", all = TRUE)
+# sort results by p-values
+DGE.annot.sorted <- DGE.results.annot %>% `[`(order(.$padj),)
+head(DGE.annot.sorted)
+```
+
+- Run gsea\
+```{r, message=FALSE}
+library(fgsea)
+# read in and select columns of interest
+res <- DGE.annot.sorted %>% dplyr::select(SYMBOL, log2FoldChange) %>% 
+  na.omit() %>% dplyr::group_by(SYMBOL) %>% dplyr::summarize(log2FoldChange=mean(log2FoldChange))
+
+# turn list into dataframe
+ranks <- tibble::deframe(res)
+
+# import pathways file to use
+pathways.kegg <- gmtPathways("/Users/noelawheeler/Desktop/Analysis of next gen seq data/angsd-project/c2.cp.kegg.v2023.1.Hs.symbols.gmt")
+
+# run gsea
+fgsea.kegg <- fgseaMultilevel(pathways=pathways.kegg, stats=ranks)
+
+# plot, visualized above
+fgsea.res.order <- fgsea.kegg %>% dplyr::select(-log2err, -ES, -leadingEdge, ) %>% dplyr::arrange(padj)
+visualize.kegg <- fgsea.res.order %>% na.omit(.)
+# ggplot(visualize.kegg, aes(reorder(pathway, NES), NES)) +
+# geom_col(aes(fill=padj<0.05)) + coord_flip() + labs(x="Pathway", y="Normalized Enrichment Score", title="Hallmark pathways from GSEA") + theme(text = element_text(size = 3))
+
+# view most enriched pathway
+plotEnrichment(pathways.kegg[["KEGG_NEUROACTIVE_LIGAND_RECEPTOR_INTERACTION"]], ranks) + labs(title="Neuroactive ligand receptor pathway")
+```
+
+In my original analysis I used both the KEGG human pathway database and the hallmark pathways. I chose these because they both provided a range of biological processes. The KEGG seemed to give more intuitive results so I included them here.
+
+The molecular signature databases are downloaded from here: https://www.gsea-msigdb.org/gsea/msigdb/index.jsp
+
+More detailed code: https://github.com/nwh84/angsd-project/blob/main/diff_expression_analysis.Rmd
+
+### Discussion
+One issue I ran into was that one control sample was far more similar to the BP1 samples than the others. At first I thought this was an error so I re-downloaded the sample and redid the analysis. However, I saw that I did not label incorrectly and this simple is very similar to the others in the BP1 group. I decided to keep this sample because I felt that an inital analysis shouldn't remove a sample that doesn't seem to have any technical issues. Another issue was the mitochondrial contamination in one sample. To address this I simply removed this from the analysis to confirm that it was not skewing the results.\
+The low percent of successful alignment in STAR was problematic. I couldn't find any obvious flags in fastQC or Qorts. One answer is that the data is just not good quality and has regions that can't be aligned due to errors. I continued with the analysis because enough reads were aligned correctly to perform DESeq. Lastly, a rather large issue with the data is that most of the BP1 group is from assessment group A and most of the control group is from assessment group B. It was difficult to find any samples in their dataset that did not follow this pattern. I couldn't find the exact differences between the two assessment groups, but it seems that that would introduce a bias into the experiment no matter what. 
+
+### Key data sets
+| Description                    | R Object name |
+|:------------------------------:|:--------------:|
+|   Qorts output                 |  res  |
+| Differential gene expression |   DGE.annot.sorted |
+|  Hallmark pathway (in diff_expression_analysis.rmd)| fgsea.hallmark|
+| KEGG pathway| fgsea.res.order | 
+
+
+References: 
+
+Chen H, Wang N, Zhao X, Ross CA, O'Shea KS, McInnis MG. Gene expression alterations in bipolar disorder postmortem brains. Bipolar Disord. 2013 Mar;15(2):177-87. doi: 10.1111/bdi.12039. Epub 2013 Jan 30. PMID: 23360497; PMCID: PMC3582727.
+
+Harrison, P.J., Hall, N., Mould, A. et al. Cellular calcium in bipolar disorder: systematic review and meta-analysis. Mol Psychiatry 26, 4106–4116 (2021). https://doi.org/10.1038/s41380-019-0622-y
+
+Hess JL, Tylee DS, Barve R, de Jong S, Ophoff RA, Kumarasinghe N, Tooney P, Schall U, Gardiner E, Beveridge NJ, Scott RJ, Yasawardene S, Perera A, Mendis J, Carr V, Kelly B, Cairns M; Neurobehavioural Genetics Unit; Tsuang MT, Glatt SJ. Transcriptomic abnormalities in peripheral blood in bipolar disorder, and discrimination of the major psychoses. Schizophr Res. 2020 Mar;217:124-135. doi: 10.1016/j.schres.2019.07.036. Epub 2019 Aug 4. PMID: 31391148; PMCID: PMC6997041.
+
+Katherine L. Helbig, Robert J. Lauerer, Jacqueline C. Bahr, Ivana A. Souza, Candace T. Myers, Betül Uysal, Niklas Schwarz, et al.,
+De Novo Pathogenic Variants in CACNA1E Cause Developmental and Epileptic Encephalopathy with Contractures, Macrocephaly, and Dyskinesias,
+The American Journal of Human Genetics, Volume 103, Issue 5, 2018, Pages 666-678,
+ISSN 0002-9297, https://doi.org/10.1016/j.ajhg.2018.09.006.
+
+Krebs, C., Ori, A., Vreeker, A., Wu, T., Cantor, R., Boks, M., . . . Ophoff, R. (2020). Whole blood transcriptome analysis in bipolar disorder reveals strong lithium effect. Psychological Medicine, 50(15), 2575-2586. doi:10.1017/S0033291719002745
+
+Park, S.W., Seo, M.K., Webster, M.J. et al. Differential expression of gene co-expression networks related to the mTOR signaling pathway in bipolar disorder. Transl Psychiatry 12, 184 (2022). https://doi.org/10.1038/s41398-022-01944-8
