@@ -33,6 +33,7 @@ $ sbatch download.sh
 ```
 
 - Align data\
+I used the hg38.ensGene.gtf.gz and Hg38.fa.gz genome and annotation file\
 align script: https://github.com/nwh84/angsd-project/blob/main/align/align_all.sh
 ```{}
 $ sbatch align_all.sh
